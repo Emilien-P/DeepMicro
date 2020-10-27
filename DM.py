@@ -62,13 +62,16 @@ class DeepMicrobiome(object):
 
         # select rows having feature index identifier string
         X = raw.loc[raw.index.str.contains(feature_string, regex=False)].T
-
+        print(X.shape)
         # get class labels
         Y = raw.loc[label_string] #'disease'
         Y = Y.replace(label_dict)
 
+        # indices
+        sample_ids = raw.iloc[1]
+
         # train and test split
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X.values.astype(dtype), Y.values.astype('int'), test_size=0.2, random_state=self.seed, stratify=Y.values)
+        self.X_train, self.X_test, self.y_train, self.y_test, self.indices_train, self.indices_test = train_test_split(X.values.astype(dtype), Y.values.astype('int'), sample_ids, test_size=0.2, random_state=self.seed, stratify=Y.values)
         self.printDataShapes()
 
     def loadCustomData(self, dtype=None):
@@ -670,8 +673,12 @@ if __name__ == '__main__':
         # write the learned representation of the training set as a file
         if args.save_rep:
             if numRLrequired == 1:
-                rep_file = dm.data_dir + "results/" + dm.prefix + dm.data + "_rep.csv"
-                pd.DataFrame(dm.X_train).to_csv(rep_file, header=None, index=None)
+                rep_file = dm.data_dir + "results/" + dm.prefix + dm.data + "_train_rep.csv"
+                pd.DataFrame(dm.X_train, index=dm.indices_train).to_csv(rep_file, header=False, index=True)
+                print("The learned representation of the training set has been saved in '{}'".format(rep_file))
+
+                rep_file = dm.data_dir + "results/" + dm.prefix + dm.data + "_test_rep.csv"
+                pd.DataFrame(dm.X_test, index=dm.indices_test).to_csv(rep_file, header=False, index=True)
                 print("The learned representation of the training set has been saved in '{}'".format(rep_file))
             else:
                 print("Warning: Command option '--save_rep' is not applied as no representation learning or dimensionality reduction has been conducted.")
