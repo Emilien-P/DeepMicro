@@ -63,7 +63,6 @@ class DeepMicrobiome(object):
         # select rows having feature index identifier string
         X = raw.loc[raw.index.str.contains(feature_string, regex=False)].T
         self.X = X
-        print(X.shape)
         # get class labels
         Y = raw.loc[label_string] #'disease'
         self.Y = Y.replace(label_dict)
@@ -72,18 +71,18 @@ class DeepMicrobiome(object):
         self.sample_ids = raw.iloc[1]
 
         # train and test split
-        self.X_train, self.X_test, self.y_train, self.y_test, self.train_indices, self.test_indices = train_test_split(X.values.astype(dtype), Y.values.astype('int'), self.sample_ids, test_size=0.2, random_state=self.seed, stratify=Y.values)
+        self.X_train, self.X_test, self.y_train, self.y_test, self.train_indices, self.test_indices = train_test_split(self.X.values.astype(dtype), self.Y.values.astype('int'), self.sample_ids, test_size=0.2, random_state=self.seed, stratify=Y.values)
         self.printDataShapes()
 
     def setIndices(self, train_indices, test_indices):
-        self.train_indices = train_indices
-        self.test_indices = test_indices
+        self.X_train = self.X.iloc[train_indices]
+        self.X_test = self.X.iloc[test_indices]
 
-        self.X_train = self.X[train_indices]
-        self.X_test = self.X[test_indices]
+        self.y_train = self.Y.iloc[train_indices]
+        self.y_test = self.Y.iloc[test_indices]
 
-        self.y_train = self.Y[train_indices]
-        self.y_test = self.Y[test_indices]
+        self.train_indices = self.sample_ids[train_indices]
+        self.test_indices = self.sample_ids[test_indices]
 
     def loadCustomData(self, dtype=None):
         # read file
@@ -623,53 +622,58 @@ if __name__ == '__main__':
     def run_exp(seed):
         # create an object and load data
         ## no argument founded
-        if args.data == None and args.custom_data == None:
-            print("[Error] Please specify an input file. (use -h option for help)")
-            exit()
-        ## provided data
-        elif args.data != None:
-            dm = DeepMicrobiome(data=args.data + '.txt', seed=seed, data_dir=args.data_dir)
+        def loadData():
+            dm = None
+            if args.data == None and args.custom_data == None:
+                print("[Error] Please specify an input file. (use -h option for help)")
+                exit()
+            ## provided data
+            elif args.data != None:
+                dm = DeepMicrobiome(data=args.data + '.txt', seed=seed, data_dir=args.data_dir)
 
-            ## specify feature string
-            feature_string = ''
-            data_string = str(args.data)
-            if data_string.split('_')[0] == 'abundance':
-                feature_string = "k__"
-            if data_string.split('_')[0] == 'marker':
-                feature_string = "gi|"
+                ## specify feature string
+                feature_string = ''
+                data_string = str(args.data)
+                if data_string.split('_')[0] == 'abundance':
+                    feature_string = "k__"
+                if data_string.split('_')[0] == 'marker':
+                    feature_string = "gi|"
 
-            ## load data into the object
-            dm.loadData(feature_string=feature_string, label_string='disease', label_dict=label_dict,
-                        dtype=dtypeDict[args.dataType])
+                ## load data into the object
+                dm.loadData(feature_string=feature_string, label_string='disease', label_dict=label_dict,
+                            dtype=dtypeDict[args.dataType])
 
-        ## user data
-        elif args.custom_data != None:
+            ## user data
+            elif args.custom_data != None:
 
-            ### without labels - only conducting representation learning
-            if args.custom_data_labels == None:
-                dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
-                dm.loadCustomData(dtype=dtypeDict[args.dataType])
+                ### without labels - only conducting representation learning
+                if args.custom_data_labels == None:
+                    dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
+                    dm.loadCustomData(dtype=dtypeDict[args.dataType])
 
-            ### with labels - conducting representation learning + classification
+                ### with labels - conducting representation learning + classification
+                else:
+                    dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
+                    dm.loadCustomDataWithLabels(label_data=args.custom_data_labels, dtype=dtypeDict[args.dataType])
+
             else:
-                dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
-                dm.loadCustomDataWithLabels(label_data=args.custom_data_labels, dtype=dtypeDict[args.dataType])
-
-        else:
-            exit()
-
-        numRLrequired = args.pca + args.ae + args.rp + args.vae + args.cae
-
-        if numRLrequired > 1:
-            raise ValueError('No multiple dimensionality Reduction')
-
-        # time check after data has been loaded
-        dm.t_start = time.time()
-
+                exit()
+            return dm
 
         def run_fold(train_indices, test_indices, k: int = 1):
+            dm = loadData()
+            numRLrequired = args.pca + args.ae + args.rp + args.vae + args.cae
+
+            if numRLrequired > 1:
+                raise ValueError('No multiple dimensionality Reduction')
+
+            # time check after data has been loaded
+            dm.t_start = time.time()
+
             # Representation learning (Dimensionality reduction)
             dm.setIndices(train_indices, test_indices)
+            print(dm.X_train.index)
+
             if args.pca:
                 dm.pca()
             if args.ae:
@@ -735,14 +739,17 @@ if __name__ == '__main__':
                     dm.classification(hyper_parameters=mlp_hyper_parameters, method='mlp', cv=args.numFolds,
                                       n_jobs=args.numJobs, scoring=args.scoring)
 
+        dm = loadData()
         if args.kfold:
             kf = StratifiedKFold(n_splits=args.kfold, random_state=seed)
             i = 0
-            for train_indices, test_indices in kf.split(dm.X, dm.Y):
+            print(dm.Y)
+            for train_indices, test_indices in kf.split(dm.X.values, dm.Y.values.astype('int')):
                 run_fold(train_indices, test_indices, i)
                 i += 1
         else:
             run_fold(dm.train_indices, dm.test_indices)
+
     # run experiments
     try:
         if args.repeat > 1:
