@@ -62,17 +62,28 @@ class DeepMicrobiome(object):
 
         # select rows having feature index identifier string
         X = raw.loc[raw.index.str.contains(feature_string, regex=False)].T
+        self.X = X
         print(X.shape)
         # get class labels
         Y = raw.loc[label_string] #'disease'
-        Y = Y.replace(label_dict)
+        self.Y = Y.replace(label_dict)
 
         # indices
-        sample_ids = raw.iloc[1]
+        self.sample_ids = raw.iloc[1]
 
         # train and test split
-        self.X_train, self.X_test, self.y_train, self.y_test, self.indices_train, self.indices_test = train_test_split(X.values.astype(dtype), Y.values.astype('int'), sample_ids, test_size=0.2, random_state=self.seed, stratify=Y.values)
+        self.X_train, self.X_test, self.y_train, self.y_test, self.train_indices, self.test_indices = train_test_split(X.values.astype(dtype), Y.values.astype('int'), self.sample_ids, test_size=0.2, random_state=self.seed, stratify=Y.values)
         self.printDataShapes()
+
+    def setIndices(self, train_indices, test_indices):
+        self.train_indices = train_indices
+        self.test_indices = test_indices
+
+        self.X_train = self.X[train_indices]
+        self.X_test = self.X[test_indices]
+
+        self.y_train = self.Y[train_indices]
+        self.y_test = self.Y[test_indices]
 
     def loadCustomData(self, dtype=None):
         # read file
@@ -508,6 +519,7 @@ if __name__ == '__main__':
     # experiment design
     exp_design = parser.add_argument_group('Experiment design')
     exp_design.add_argument("-s", "--seed", help="random seed for train and test split", type=int, default=0)
+    exp_design.add_argument("-k", "--kfold", help="Number of stratified folds to perform", type=int, default=5)
     exp_design.add_argument("-r", "--repeat", help="repeat experiment x times by changing random seed for splitting data",
                         default=5, type=int)
 
@@ -609,7 +621,6 @@ if __name__ == '__main__':
 
     # run exp function
     def run_exp(seed):
-
         # create an object and load data
         ## no argument founded
         if args.data == None and args.custom_data == None:
@@ -655,67 +666,83 @@ if __name__ == '__main__':
         # time check after data has been loaded
         dm.t_start = time.time()
 
-        # Representation learning (Dimensionality reduction)
-        if args.pca:
-            dm.pca()
-        if args.ae:
-            dm.ae(dims=[int(i) for i in args.dims.split(',')], act=args.act, epochs=args.max_epochs, loss=args.aeloss,
-                  latent_act=args.ae_lact, output_act=args.ae_oact, patience=args.patience, no_trn=args.no_trn)
-        if args.vae:
-            dm.vae(dims=[int(i) for i in args.dims.split(',')], act=args.act, epochs=args.max_epochs, loss=args.aeloss, output_act=args.ae_oact,
-                   patience= 25 if args.patience==20 else args.patience, beta=args.vae_beta, warmup=args.vae_warmup, warmup_rate=args.vae_warmup_rate, no_trn=args.no_trn)
-        if args.cae:
-            dm.cae(dims=[int(i) for i in args.dims.split(',')], act=args.act, epochs=args.max_epochs, loss=args.aeloss, output_act=args.ae_oact,
-                   patience=args.patience, rf_rate = args.rf_rate, st_rate = args.st_rate, no_trn=args.no_trn)
-        if args.rp:
-            dm.rp()
 
-        # write the learned representation of the training set as a file
-        if args.save_rep:
-            if numRLrequired == 1:
-                rep_file = dm.data_dir + "results/" + dm.prefix + dm.data + "_train_rep.csv"
-                pd.DataFrame(dm.X_train, index=dm.indices_train).to_csv(rep_file, header=False, index=True)
-                print("The learned representation of the training set has been saved in '{}'".format(rep_file))
+        def run_fold(train_indices, test_indices, k: int = 1):
+            # Representation learning (Dimensionality reduction)
+            dm.setIndices(train_indices, test_indices)
+            if args.pca:
+                dm.pca()
+            if args.ae:
+                dm.ae(dims=[int(i) for i in args.dims.split(',')], act=args.act, epochs=args.max_epochs,
+                      loss=args.aeloss,
+                      latent_act=args.ae_lact, output_act=args.ae_oact, patience=args.patience, no_trn=args.no_trn)
+            if args.vae:
+                dm.vae(dims=[int(i) for i in args.dims.split(',')], act=args.act, epochs=args.max_epochs,
+                       loss=args.aeloss, output_act=args.ae_oact,
+                       patience=25 if args.patience == 20 else args.patience, beta=args.vae_beta,
+                       warmup=args.vae_warmup, warmup_rate=args.vae_warmup_rate, no_trn=args.no_trn)
+            if args.cae:
+                dm.cae(dims=[int(i) for i in args.dims.split(',')], act=args.act, epochs=args.max_epochs,
+                       loss=args.aeloss, output_act=args.ae_oact,
+                       patience=args.patience, rf_rate=args.rf_rate, st_rate=args.st_rate, no_trn=args.no_trn)
+            if args.rp:
+                dm.rp()
 
-                rep_file = dm.data_dir + "results/" + dm.prefix + dm.data + "_test_rep.csv"
-                pd.DataFrame(dm.X_test, index=dm.indices_test).to_csv(rep_file, header=False, index=True)
-                print("The learned representation of the training set has been saved in '{}'".format(rep_file))
+            # write the learned representation of the training set as a file
+            if args.save_rep:
+                if numRLrequired == 1:
+                    fold_dir = os.path.join(dm.data_dir, "results", str(k))
+                    os.mkdir(fold_dir)
+                    rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f"_train_rep.csv")
+                    pd.DataFrame(dm.X_train, index=dm.train_indices).to_csv(rep_file, header=False, index=True)
+                    print("The learned representation of the training set has been saved in '{}'".format(rep_file))
+
+                    rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f"_test_rep.csv")
+                    pd.DataFrame(dm.X_test, index=dm.test_indices).to_csv(rep_file, header=False, index=True)
+                    print("The learned representation of the training set has been saved in '{}'".format(rep_file))
+                else:
+                    print(
+                        "Warning: Command option '--save_rep' is not applied as no representation learning or dimensionality reduction has been conducted.")
+
+            # Classification
+            if args.no_clf or (args.data == None and args.custom_data_labels == None):
+                print("Classification task has been skipped.")
             else:
-                print("Warning: Command option '--save_rep' is not applied as no representation learning or dimensionality reduction has been conducted.")
+                # turn off GPU
+                os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+                importlib.reload(keras)
 
-        # Classification
-        if args.no_clf or (args.data == None and args.custom_data_labels == None):
-            print("Classification task has been skipped.")
+                # training classification models
+                if args.method == "svm":
+                    dm.classification(hyper_parameters=svm_hyper_parameters, method='svm', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring, cache_size=args.svm_cache)
+                elif args.method == "rf":
+                    dm.classification(hyper_parameters=rf_hyper_parameters, method='rf', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring)
+                elif args.method == "mlp":
+                    dm.classification(hyper_parameters=mlp_hyper_parameters, method='mlp', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring)
+                elif args.method == "svm_rf":
+                    dm.classification(hyper_parameters=svm_hyper_parameters, method='svm', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring, cache_size=args.svm_cache)
+                    dm.classification(hyper_parameters=rf_hyper_parameters, method='rf', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring)
+                else:
+                    dm.classification(hyper_parameters=svm_hyper_parameters, method='svm', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring, cache_size=args.svm_cache)
+                    dm.classification(hyper_parameters=rf_hyper_parameters, method='rf', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring)
+                    dm.classification(hyper_parameters=mlp_hyper_parameters, method='mlp', cv=args.numFolds,
+                                      n_jobs=args.numJobs, scoring=args.scoring)
+
+        if args.kfold:
+            kf = StratifiedKFold(n_splits=args.kfold, random_state=seed)
+            i = 0
+            for train_indices, test_indices in kf.split(dm.X, dm.Y):
+                run_fold(train_indices, test_indices, i)
+                i += 1
         else:
-            # turn off GPU
-            os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-            importlib.reload(keras)
-
-            # training classification models
-            if args.method == "svm":
-                dm.classification(hyper_parameters=svm_hyper_parameters, method='svm', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring, cache_size=args.svm_cache)
-            elif args.method == "rf":
-                dm.classification(hyper_parameters=rf_hyper_parameters, method='rf', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring)
-            elif args.method == "mlp":
-                dm.classification(hyper_parameters=mlp_hyper_parameters, method='mlp', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring)
-            elif args.method == "svm_rf":
-                dm.classification(hyper_parameters=svm_hyper_parameters, method='svm', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring, cache_size=args.svm_cache)
-                dm.classification(hyper_parameters=rf_hyper_parameters, method='rf', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring)
-            else:
-                dm.classification(hyper_parameters=svm_hyper_parameters, method='svm', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring, cache_size=args.svm_cache)
-                dm.classification(hyper_parameters=rf_hyper_parameters, method='rf', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring)
-                dm.classification(hyper_parameters=mlp_hyper_parameters, method='mlp', cv=args.numFolds,
-                                  n_jobs=args.numJobs, scoring=args.scoring)
-
-
-
+            run_fold(dm.train_indices, dm.test_indices)
     # run experiments
     try:
         if args.repeat > 1:
