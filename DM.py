@@ -82,8 +82,8 @@ class DeepMicrobiome(object):
         self.y_train = self.Y.iloc[train_indices]
         self.y_test = self.Y.iloc[test_indices]
 
-        self.train_indices = self.sample_ids[train_indices]
-        self.test_indices = self.sample_ids[test_indices]
+        self.train_indices = self.sample_ids.iloc[train_indices]
+        self.test_indices = self.sample_ids.iloc[test_indices]
 
     def loadCustomData(self, dtype=None):
         # read file
@@ -672,7 +672,6 @@ if __name__ == '__main__':
 
             # Representation learning (Dimensionality reduction)
             dm.setIndices(train_indices, test_indices)
-            print(dm.X_train.index)
 
             if args.pca:
                 dm.pca()
@@ -698,11 +697,11 @@ if __name__ == '__main__':
                     fold_dir = os.path.join(dm.data_dir, "results", str(k))
                     if not os.path.isdir(fold_dir):
                         os.mkdir(fold_dir)
-                    rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f"_train_rep.csv")
+                    rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f".train.csv")
                     pd.DataFrame(dm.X_train, index=dm.train_indices).to_csv(rep_file, header=False, index=True)
                     print("The learned representation of the training set has been saved in '{}'".format(rep_file))
 
-                    rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f"_test_rep.csv")
+                    rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f".test.csv")
                     pd.DataFrame(dm.X_test, index=dm.test_indices).to_csv(rep_file, header=False, index=True)
                     print("The learned representation of the training set has been saved in '{}'".format(rep_file))
                 else:
