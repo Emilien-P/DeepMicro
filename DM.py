@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib
+import multiprocessing
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
@@ -624,7 +625,7 @@ if __name__ == '__main__':
             exit()
         ## provided data
         elif args.data != None:
-            dm = DeepMicrobiome(data=args.data + '.txt', seed=seed, data_dir=args.data_dir)
+            dm = DeepMicrobiome(data=args.data + '.txt', seed=args.seed, data_dir=args.data_dir)
 
             ## specify feature string
             feature_string = ''
@@ -643,12 +644,12 @@ if __name__ == '__main__':
 
             ### without labels - only conducting representation learning
             if args.custom_data_labels == None:
-                dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
+                dm = DeepMicrobiome(data=args.custom_data, seed=args.seed, data_dir=args.data_dir)
                 dm.loadCustomData(dtype=dtypeDict[args.dataType])
 
             ### with labels - conducting representation learning + classification
             else:
-                dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
+                dm = DeepMicrobiome(data=args.custom_data, seed=args.seed, data_dir=args.data_dir)
                 dm.loadCustomDataWithLabels(label_data=args.custom_data_labels, dtype=dtypeDict[args.dataType])
 
         else:
@@ -745,7 +746,9 @@ if __name__ == '__main__':
             i = 0
             print(dm.Y)
             for train_indices, test_indices in kf.split(dm.X.values, dm.Y.values.astype('int')):
-                run_fold(train_indices, test_indices, i)
+                fold_process = multiprocessing.Process(target=run_fold, args=(train_indices, test_indices, i))
+                fold_process.start()
+                fold_process.join()
                 i += 1
         else:
             run_fold(dm.train_indices, dm.test_indices)
