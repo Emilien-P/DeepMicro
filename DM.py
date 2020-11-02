@@ -696,7 +696,8 @@ if __name__ == '__main__':
             if args.save_rep:
                 if numRLrequired == 1:
                     fold_dir = os.path.join(dm.data_dir, "results", str(k))
-                    os.mkdir(fold_dir)
+                    if not os.path.isdir(fold_dir):
+                        os.mkdir(fold_dir)
                     rep_file = os.path.join(fold_dir, dm.prefix + dm.data + f"_train_rep.csv")
                     pd.DataFrame(dm.X_train, index=dm.train_indices).to_csv(rep_file, header=False, index=True)
                     print("The learned representation of the training set has been saved in '{}'".format(rep_file))
