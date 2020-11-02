@@ -617,49 +617,48 @@ if __name__ == '__main__':
                              'dropout_rate': [0.1, 0.3],
                              },]
 
+    def loadData():
+        dm = None
+        if args.data == None and args.custom_data == None:
+            print("[Error] Please specify an input file. (use -h option for help)")
+            exit()
+        ## provided data
+        elif args.data != None:
+            dm = DeepMicrobiome(data=args.data + '.txt', seed=seed, data_dir=args.data_dir)
+
+            ## specify feature string
+            feature_string = ''
+            data_string = str(args.data)
+            if data_string.split('_')[0] == 'abundance':
+                feature_string = "k__"
+            if data_string.split('_')[0] == 'marker':
+                feature_string = "gi|"
+
+            ## load data into the object
+            dm.loadData(feature_string=feature_string, label_string='disease', label_dict=label_dict,
+                        dtype=dtypeDict[args.dataType])
+
+        ## user data
+        elif args.custom_data != None:
+
+            ### without labels - only conducting representation learning
+            if args.custom_data_labels == None:
+                dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
+                dm.loadCustomData(dtype=dtypeDict[args.dataType])
+
+            ### with labels - conducting representation learning + classification
+            else:
+                dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
+                dm.loadCustomDataWithLabels(label_data=args.custom_data_labels, dtype=dtypeDict[args.dataType])
+
+        else:
+            exit()
+        return dm
 
     # run exp function
     def run_exp(seed):
         # create an object and load data
         ## no argument founded
-        def loadData():
-            dm = None
-            if args.data == None and args.custom_data == None:
-                print("[Error] Please specify an input file. (use -h option for help)")
-                exit()
-            ## provided data
-            elif args.data != None:
-                dm = DeepMicrobiome(data=args.data + '.txt', seed=seed, data_dir=args.data_dir)
-
-                ## specify feature string
-                feature_string = ''
-                data_string = str(args.data)
-                if data_string.split('_')[0] == 'abundance':
-                    feature_string = "k__"
-                if data_string.split('_')[0] == 'marker':
-                    feature_string = "gi|"
-
-                ## load data into the object
-                dm.loadData(feature_string=feature_string, label_string='disease', label_dict=label_dict,
-                            dtype=dtypeDict[args.dataType])
-
-            ## user data
-            elif args.custom_data != None:
-
-                ### without labels - only conducting representation learning
-                if args.custom_data_labels == None:
-                    dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
-                    dm.loadCustomData(dtype=dtypeDict[args.dataType])
-
-                ### with labels - conducting representation learning + classification
-                else:
-                    dm = DeepMicrobiome(data=args.custom_data, seed=seed, data_dir=args.data_dir)
-                    dm.loadCustomDataWithLabels(label_data=args.custom_data_labels, dtype=dtypeDict[args.dataType])
-
-            else:
-                exit()
-            return dm
-
         def run_fold(train_indices, test_indices, k: int = 1):
             dm = loadData()
             numRLrequired = args.pca + args.ae + args.rp + args.vae + args.cae
