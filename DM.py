@@ -744,7 +744,6 @@ if __name__ == '__main__':
         if args.kfold:
             kf = StratifiedKFold(n_splits=args.kfold, random_state=seed)
             i = 0
-            print(dm.Y)
             for train_indices, test_indices in kf.split(dm.X.values, dm.Y.values.astype('int')):
                 fold_process = multiprocessing.Process(target=run_fold, args=(train_indices, test_indices, i))
                 fold_process.start()
