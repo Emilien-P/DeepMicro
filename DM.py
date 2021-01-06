@@ -110,7 +110,7 @@ class DeepMicrobiome(object):
         if os.path.isfile(filename) and os.path.isfile(label_filename):
             raw = pd.read_csv(filename, sep=',', index_col=0, header=None)
             label = pd.read_csv(label_filename, sep=',', index_col=0, header=None)
-            assert raw.index == label.index
+            assert (raw.index == label.index).all()
         else:
             if not os.path.isfile(filename):
                 print("FileNotFoundError: File {} does not exist".format(filename))
@@ -120,13 +120,14 @@ class DeepMicrobiome(object):
 
         # label data validity check
         if not label.values.shape[1] > 1:
-            label = label.values.reshape((label.values.shape[0]))
+            pass
+            #label = label.values.reshape((label.values.shape[0]))
         else:
             print('FileSpecificationError: The label file contains more than 1 column.')
             exit()
 
         # train and test split
-        self.X = raw.values.astype(dtype)
+        self.X = raw.astype(dtype)
         self.sample_ids = raw.index.to_series()
         self.Y = label.astype(int)
 
