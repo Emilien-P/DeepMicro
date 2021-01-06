@@ -108,8 +108,9 @@ class DeepMicrobiome(object):
         filename = self.data_dir + "data/" + self.filename
         label_filename = self.data_dir + "data/" + label_data
         if os.path.isfile(filename) and os.path.isfile(label_filename):
-            raw = pd.read_csv(filename, sep=',', index_col=False, header=None)
-            label = pd.read_csv(label_filename, sep=',', index_col=False, header=None)
+            raw = pd.read_csv(filename, sep=',', index_col=0, header=None)
+            label = pd.read_csv(label_filename, sep=',', index_col=0, header=None)
+            assert raw.index == label.index
         else:
             if not os.path.isfile(filename):
                 print("FileNotFoundError: File {} does not exist".format(filename))
@@ -119,16 +120,20 @@ class DeepMicrobiome(object):
 
         # label data validity check
         if not label.values.shape[1] > 1:
-            label_flatten = label.values.reshape((label.values.shape[0]))
+            label = label.values.reshape((label.values.shape[0]))
         else:
             print('FileSpecificationError: The label file contains more than 1 column.')
             exit()
 
         # train and test split
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(raw.values.astype(dtype),
-                                                                                label_flatten.astype('int'), test_size=0.2,
+        self.X = raw.values.astype(dtype)
+        self.sample_ids = raw.index.to_series()
+        self.Y = label.astype(int)
+
+        self.X_train, self.X_test, self.y_train, self.y_test, self.train_indices, self.test_indices = train_test_split(raw.values.astype(dtype),
+                                                                                label.astype('int'), self.sample_ids, test_size=0.2,
                                                                                 random_state=self.seed,
-                                                                                stratify=label_flatten)
+                                                                                stratify=label)
         self.printDataShapes()
 
 
